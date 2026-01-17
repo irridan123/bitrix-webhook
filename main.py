@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import asyncio
 from telegram import Bot
 import logging
+import json
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -12,7 +13,7 @@ app = Flask(__name__)
 # Конфигурация
 TELEGRAM_TOKEN = "7621205041:AAF7VtIQJjjbMCwS5Udz8utHVH1B0aFtqk0"
 BITRIX_APP_TOKEN = "4176wq9roeiyt0oc1y9epxxj9g49bqi6"
-YOUR_TELEGRAM_CHAT_ID = "1389473957"  
+YOUR_TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # Замените на ваш chat_id
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
@@ -28,26 +29,50 @@ async def send_telegram_notification(message):
 def bitrix_webhook():
     """Обработчик исходящих вебхуков от Bitrix24"""
     try:
-        data = request.json
+        # Bitrix24 может отправлять данные в разных форматах
+        content_type = request.content_type or ''
+        logger.info(f"Content-Type: {content_type}")
+        
+        # Получаем данные в зависимости от Content-Type
+        if 'application/json' in content_type:
+            data = request.json
+        else:
+            # Для application/x-www-form-urlencoded или multipart/form-data
+            data = request.form.to_dict()
+            # Если данных нет в form, пробуем получить из args (GET параметры)
+            if not data:
+                data = request.args.to_dict()
+            # Если данные пришли как строка JSON в одном из полей
+            for key, value in list(data.items()):
+                try:
+                    data[key] = json.loads(value)
+                except:
+                    pass
+        
         logger.info(f"Получен webhook от Bitrix24: {data}")
         
-        # Проверка токена приложения
+        # Проверка токена приложения (если есть в данных)
         auth_data = data.get('auth', {})
+        if isinstance(auth_data, str):
+            try:
+                auth_data = json.loads(auth_data)
+            except:
+                auth_data = {}
+        
         app_token = auth_data.get('application_token', '')
         
-        if app_token != BITRIX_APP_TOKEN:
+        # Если токен есть, проверяем его
+        if app_token and app_token != BITRIX_APP_TOKEN:
             logger.warning(f"Неверный токен: {app_token}")
             return jsonify({"error": "Invalid token"}), 403
         
         # Получаем информацию о событии
         event = data.get('event', 'Неизвестное событие')
-        fields_after = data.get('data', {}).get('FIELDS_AFTER', {})
         
         # Формируем сообщение для Telegram
         message = f"🔔 Событие из Bitrix24\n\n"
         message += f"Тип: {event}\n"
-        message += f"Данные: {fields_after}\n"
-        message += f"Домен: {auth_data.get('domain', 'N/A')}"
+        message += f"Данные:\n{json.dumps(data, indent=2, ensure_ascii=False)[:500]}"
         
         # Отправляем уведомление в Telegram
         asyncio.run(send_telegram_notification(message))
@@ -55,7 +80,7 @@ def bitrix_webhook():
         return jsonify({"status": "ok"}), 200
         
     except Exception as e:
-        logger.error(f"Ошибка обработки webhook: {e}")
+        logger.error(f"Ошибка обработки webhook: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
@@ -70,6 +95,7 @@ def index():
     <h1>Bitrix24 Webhook Handler</h1>
     <p>Сервер работает!</p>
     <p>Endpoint для Bitrix24: <code>/webhook/bitrix</code></p>
+    <p>Status: <a href="/health">Health Check</a></p>
     """, 200
 
 if __name__ == '__main__':
