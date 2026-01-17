@@ -13,7 +13,7 @@ app = Flask(__name__)
 # Конфигурация
 TELEGRAM_TOKEN = "7621205041:AAF7VtIQJjjbMCwS5Udz8utHVH1B0aFtqk0"
 BITRIX_APP_TOKEN = "4176wq9roeiyt0oc1y9epxxj9g49bqi6"
-YOUR_TELEGRAM_CHAT_ID = "YOUR_CHAT_ID"  # Замените на ваш chat_id
+YOUR_TELEGRAM_CHAT_ID = "1389473957"  # Замените на ваш chat_id
 
 bot = Bot(token=TELEGRAM_TOKEN)
 
